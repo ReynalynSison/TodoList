@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:local_auth/local_auth.dart';
 import 'main.dart';
 
 class Settings extends StatefulWidget {
@@ -12,6 +13,7 @@ class Settings extends StatefulWidget {
 
 class _SettingsState extends State<Settings> {
   final box = Hive.box("database");
+  final _auth = LocalAuthentication();
 
   bool get _isDarkMode => box.get("darkMode", defaultValue: false) as bool;
   Color get _bgColor => _isDarkMode ? const Color(0xFF1C1C1E) : const Color(0xFFF5F0EB);
@@ -161,7 +163,66 @@ class _SettingsState extends State<Settings> {
                   trailing: CupertinoSwitch(
                     value: box.get("biometrics", defaultValue: false) as bool,
                     activeTrackColor: _accentColor,
-                    onChanged: (v) => setState(() => box.put("biometrics", v)),
+                    onChanged: (v) async {
+                      if (v) {
+                        // Check if device supports biometrics
+                        final bool supported = await _auth.isDeviceSupported();
+                        final bool canCheck = await _auth.canCheckBiometrics;
+                        if (!supported || !canCheck) {
+                          if (!mounted) return;
+                          showCupertinoDialog(
+                            context: context,
+                            builder: (_) => CupertinoAlertDialog(
+                              title: const Text("Not Supported"),
+                              content: const Text("This device does not support Face ID or Touch ID, or no biometrics are enrolled."),
+                              actions: [
+                                CupertinoDialogAction(
+                                  child: const Text("OK"),
+                                  onPressed: () => Navigator.pop(context),
+                                ),
+                              ],
+                            ),
+                          );
+                          return;
+                        }
+                        // Do a test auth to confirm it works
+                        try {
+                          final bool ok = await _auth.authenticate(
+                            localizedReason: 'Confirm your identity to enable biometrics.',
+                            biometricOnly: true,
+                          );
+                          if (!mounted) return;
+                          if (ok) {
+                            box.put("biometrics", true);
+                          } else {
+                            showCupertinoDialog(
+                              context: context,
+                              builder: (_) => CupertinoAlertDialog(
+                                title: const Text("Authentication Failed"),
+                                content: const Text("Biometrics could not be verified. Please try again."),
+                                actions: [
+                                  CupertinoDialogAction(child: const Text("OK"), onPressed: () => Navigator.pop(context)),
+                                ],
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (!mounted) return;
+                          showCupertinoDialog(
+                            context: context,
+                            builder: (_) => CupertinoAlertDialog(
+                              title: const Text("Error"),
+                              content: Text("$e"),
+                              actions: [
+                                CupertinoDialogAction(child: const Text("OK"), onPressed: () => Navigator.pop(context)),
+                              ],
+                            ),
+                          );
+                        }
+                      } else {
+                        box.put("biometrics", false);
+                      }
+                    },
                   ),
                   textColor: _textColor,
                   subtextColor: _subtextColor,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
+import 'notification_service.dart';
 
 class Errands extends StatefulWidget {
   const Errands({super.key});
@@ -16,7 +17,8 @@ class _ErrandsState extends State<Errands> {
   List<dynamic> todo = [];
   List<dynamic> archive = [];
   DateTime _selectedDay = DateTime.now();
-  bool _showAll = false; // toggle between day view and all tasks
+  bool _showAll = false;
+  final ScrollController _weekScrollController = ScrollController();
 
   // Add task fields
   final TextEditingController _taskController = TextEditingController();
@@ -25,6 +27,26 @@ class _ErrandsState extends State<Errands> {
   void initState() {
     super.initState();
     _loadData();
+    // Auto-scroll to today after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToToday());
+  }
+
+  // Each day cell is 52px wide + 8px margin (4 each side) = 60px per item
+  static const double _dayCellWidth = 60.0;
+
+  void _scrollToToday() {
+    final today = DateTime.now();
+    final todayIndex = _weekDays.indexWhere((d) =>
+        d.year == today.year && d.month == today.month && d.day == today.day);
+    if (todayIndex < 0 || !_weekScrollController.hasClients) return;
+    // Scroll so today is centered in the viewport
+    final screenWidth = _weekScrollController.position.viewportDimension;
+    final offset = (_dayCellWidth * todayIndex) - (screenWidth / 2) + (_dayCellWidth / 2);
+    _weekScrollController.animateTo(
+      offset.clamp(0.0, _weekScrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+    );
   }
 
   void _loadData() {
@@ -46,12 +68,13 @@ class _ErrandsState extends State<Errands> {
 
   String get _username => box.get("username", defaultValue: "there") ?? "there";
 
-  // Build the 7-day week strip centered on today
+  // Show 3 weeks: previous, current, next — 21 days total centered on today
   List<DateTime> get _weekDays {
     final today = DateTime.now();
-    // show Mon-Sun of current week
     final monday = today.subtract(Duration(days: today.weekday - 1));
-    return List.generate(7, (i) => monday.add(Duration(days: i)));
+    // Start from 7 days before this Monday (previous week)
+    final start = monday.subtract(const Duration(days: 7));
+    return List.generate(21, (i) => start.add(Duration(days: i)));
   }
 
   Color get _accentColor {
@@ -68,6 +91,20 @@ class _ErrandsState extends State<Errands> {
   Color get _cardColor => _isDarkMode ? const Color(0xFF2C2C2E) : CupertinoColors.white;
   Color get _textColor => _isDarkMode ? CupertinoColors.white : const Color(0xFF1A1A2E);
   Color get _subtextColor => _isDarkMode ? CupertinoColors.systemGrey : const Color(0xFF888888);
+
+  void _showToast(BuildContext context, String message, {Color iconColor = const Color(0xFFFFB300), IconData icon = CupertinoIcons.clock_fill}) {
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 100,
+        left: 24,
+        right: 24,
+        child: _ToastWidget(message: message, iconColor: iconColor, icon: icon),
+      ),
+    );
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3), () => entry.remove());
+  }
 
   void _openAddSheet() {
     _taskController.clear();
@@ -93,14 +130,36 @@ class _ErrandsState extends State<Errands> {
             });
             box.put("todo", todo);
           });
+          if (time != null && date != null) {
+            // Schedule device notification
+            final scheduledTime = DateTime(
+              date.year, date.month, date.day, time.hour, time.minute,
+            );
+            final id = NotificationService.taskId(task.trim(), dateStr);
+            NotificationService.instance.scheduleTaskNotificationWithReminder(
+              id: id,
+              taskName: task.trim(),
+              scheduledTime: scheduledTime,
+            );
+            _showToast(context, 'Task added to Alerts!',
+                iconColor: const Color(0xFF4CAF50), icon: CupertinoIcons.bell_fill);
+          } else {
+            _showToast(context, 'No time set — task won\'t appear in Alerts',
+                iconColor: const Color(0xFFFFB300), icon: CupertinoIcons.clock_fill);
+          }
         },
       ),
     );
   }
 
   void _archiveTask(int globalIndex) {
+    final task = todo[globalIndex];
+    // Cancel notification
+    final id = NotificationService.taskId(
+        task["task"] ?? '', task["date"] ?? '');
+    NotificationService.instance.cancelTaskNotification(id);
     setState(() {
-      archive.add(todo[globalIndex]);
+      archive.add(task);
       todo.removeAt(globalIndex);
       box.put("todo", todo);
       box.put("archive", archive);
@@ -108,6 +167,11 @@ class _ErrandsState extends State<Errands> {
   }
 
   void _deleteTask(int globalIndex) {
+    final task = todo[globalIndex];
+    // Cancel notification
+    final id = NotificationService.taskId(
+        task["task"] ?? '', task["date"] ?? '');
+    NotificationService.instance.cancelTaskNotification(id);
     setState(() {
       todo.removeAt(globalIndex);
       box.put("todo", todo);
@@ -221,6 +285,7 @@ class _ErrandsState extends State<Errands> {
             SizedBox(
               height: 80,
               child: ListView.builder(
+                controller: _weekScrollController,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: _weekDays.length,
@@ -239,9 +304,9 @@ class _ErrandsState extends State<Errands> {
                   }).length;
 
                   return GestureDetector(
-                    onTap: isPast ? null : () => setState(() => _selectedDay = day),
+                    onTap: () => setState(() => _selectedDay = day),
                     child: Opacity(
-                      opacity: isPast ? 0.35 : 1.0,
+                      opacity: isPast ? 0.45 : 1.0,
                       child: Container(
                         width: 52,
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -363,6 +428,7 @@ class _ErrandsState extends State<Errands> {
   @override
   void dispose() {
     _taskController.dispose();
+    _weekScrollController.dispose();
     super.dispose();
   }
 }
@@ -420,7 +486,24 @@ class _TaskCard extends StatelessWidget {
           extentRatio: 0.48,
           children: [
             CustomSlidableAction(
-              onPressed: (_) => onArchive(),
+              onPressed: (_) => showCupertinoDialog(
+                context: context,
+                builder: (_) => CupertinoAlertDialog(
+                  title: const Text("Move to Archive?"),
+                  content: Text('"${task["task"]}" will be moved to your archive.'),
+                  actions: [
+                    CupertinoDialogAction(
+                      onPressed: () { Navigator.pop(context); onArchive(); },
+                      child: const Text("Archive"),
+                    ),
+                    CupertinoDialogAction(
+                      isDestructiveAction: true,
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("Cancel"),
+                    ),
+                  ],
+                ),
+              ),
               backgroundColor: const Color(0xFF5B9CF6),
               foregroundColor: Colors.white,
               borderRadius: const BorderRadius.only(
@@ -473,7 +556,29 @@ class _TaskCard extends StatelessWidget {
           ],
         ),
         child: GestureDetector(
-          onTap: onToggle,
+          onTap: () {
+            final isDone = task["isDone"] == true;
+            showCupertinoDialog(
+              context: context,
+              builder: (_) => CupertinoAlertDialog(
+                title: Text(isDone ? "Mark as Undone?" : "Mark as Done?"),
+                content: Text(isDone
+                    ? '"${task["task"]}" will be marked as not done.'
+                    : '"${task["task"]}" will be marked as completed.'),
+                actions: [
+                  CupertinoDialogAction(
+                    onPressed: () { Navigator.pop(context); onToggle(); },
+                    child: Text(isDone ? "Mark Undone" : "Mark Done"),
+                  ),
+                  CupertinoDialogAction(
+                    isDestructiveAction: true,
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel"),
+                  ),
+                ],
+              ),
+            );
+          },
           child: Container(
             decoration: BoxDecoration(
               color: cardColor,
@@ -566,38 +671,79 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
   DateTime? _date;
   TimeOfDay? _time;
 
+  // Helper: build picker popup with proper text styling
+  Widget _pickerShell({required Widget child}) {
+    return CupertinoTheme(
+      data: CupertinoThemeData(
+        brightness: widget.isDark ? Brightness.dark : Brightness.light,
+        textTheme: CupertinoTextThemeData(
+          dateTimePickerTextStyle: TextStyle(
+            fontSize: 20,
+            color: widget.isDark ? CupertinoColors.white : const Color(0xFF1A1A2E),
+          ),
+          pickerTextStyle: TextStyle(
+            fontSize: 20,
+            color: widget.isDark ? CupertinoColors.white : const Color(0xFF1A1A2E),
+          ),
+        ),
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontSize: 16,
+          color: widget.isDark ? CupertinoColors.white : const Color(0xFF1A1A2E),
+          decoration: TextDecoration.none,
+        ),
+        child: Container(
+          height: 320,
+          color: widget.isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemBackground,
+          child: child,
+        ),
+      ),
+    );
+  }
+
   void _pickDate() {
-    final now = DateTime.now();
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final minDate = DateTime(today.year - 1, today.month, today.day);
+    final maxDate = DateTime(today.year + 5, today.month, today.day);
+    // Use stored date if valid, else today
+    DateTime tempDate = (_date != null && !_date!.isBefore(minDate)) ? _date! : today;
+
     showCupertinoModalPopup(
       context: context,
-      builder: (_) => Container(
-        height: 280,
-        color: widget.isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemBackground,
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CupertinoButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                CupertinoButton(
-                  child: Text('Done', style: TextStyle(color: widget.accentColor)),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            Expanded(
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: _date ?? now,
-                minimumDate: now.subtract(const Duration(days: 365)),
-                maximumDate: now.add(const Duration(days: 365 * 5)),
-                onDateTimeChanged: (d) => setState(() => _date = d),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => _pickerShell(
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: Text('Cancel',
+                        style: TextStyle(color: widget.isDark ? CupertinoColors.white : CupertinoColors.activeBlue)),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                  CupertinoButton(
+                    child: Text('Done',
+                        style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.w600)),
+                    onPressed: () {
+                      setState(() => _date = tempDate);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ],
               ),
-            ),
-          ],
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: tempDate,
+                  minimumDate: minDate,
+                  maximumDate: maxDate,
+                  onDateTimeChanged: (d) => setModalState(() => tempDate = d),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -605,34 +751,47 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
 
   void _pickTime() {
     final now = DateTime.now();
+    // Use stored time if set, else current time — no seconds/ms
+    final initial = _time != null
+        ? DateTime(now.year, now.month, now.day, _time!.hour, _time!.minute)
+        : DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    TimeOfDay tempTime = TimeOfDay(hour: initial.hour, minute: initial.minute);
+
     showCupertinoModalPopup(
       context: context,
-      builder: (_) => Container(
-        height: 280,
-        color: widget.isDark ? const Color(0xFF2C2C2E) : CupertinoColors.systemBackground,
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CupertinoButton(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                CupertinoButton(
-                  child: Text('Done', style: TextStyle(color: widget.accentColor)),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            Expanded(
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.time,
-                initialDateTime: DateTime(now.year, now.month, now.day, _time?.hour ?? now.hour, _time?.minute ?? now.minute),
-                onDateTimeChanged: (d) => setState(() => _time = TimeOfDay(hour: d.hour, minute: d.minute)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => _pickerShell(
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                    child: Text('Cancel',
+                        style: TextStyle(color: widget.isDark ? CupertinoColors.white : CupertinoColors.activeBlue)),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                  CupertinoButton(
+                    child: Text('Done',
+                        style: TextStyle(color: widget.accentColor, fontWeight: FontWeight.w600)),
+                    onPressed: () {
+                      setState(() => _time = tempTime);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                ],
               ),
-            ),
-          ],
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.time,
+                  initialDateTime: initial,
+                  onDateTimeChanged: (d) => setModalState(() {
+                    tempTime = TimeOfDay(hour: d.hour, minute: d.minute);
+                  }),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -657,170 +816,188 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
   Widget build(BuildContext context) {
     final bg = widget.isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F0EB);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    return DefaultTextStyle(
+      style: TextStyle(
+        color: widget.textColor,
+        fontSize: 15,
+        decoration: TextDecoration.none,
       ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        top: 12,
-        left: 24,
-        right: 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: widget.isDark ? Colors.grey.shade600 : Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 24,
+          top: 12,
+          left: 24,
+          right: 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: widget.isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          Text(
-            'New Task',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: widget.textColor,
+            Text(
+              'New Task',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: widget.textColor,
+                decoration: TextDecoration.none,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          // Task input
-          Container(
-            decoration: BoxDecoration(
-              color: widget.cardColor,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2)),
+            // Task input
+            Container(
+              decoration: BoxDecoration(
+                color: widget.cardColor,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2)),
+                ],
+              ),
+              child: CupertinoTextField(
+                controller: _ctrl,
+                placeholder: 'What do you need to do?',
+                placeholderStyle: TextStyle(color: widget.subtextColor),
+                style: TextStyle(color: widget.textColor, fontSize: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(color: Colors.transparent),
+                maxLines: 3,
+                minLines: 1,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Date & Time chips
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _date != null ? widget.accentColor.withValues(alpha: 0.12) : widget.cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _date != null ? widget.accentColor : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.calendar, size: 18,
+                              color: _date != null ? widget.accentColor : widget.subtextColor),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _formatDate(),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _date != null ? widget.accentColor : widget.subtextColor,
+                                fontWeight: _date != null ? FontWeight.w600 : FontWeight.normal,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickTime,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _time != null ? widget.accentColor.withValues(alpha: 0.12) : widget.cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _time != null ? widget.accentColor : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.clock, size: 18,
+                              color: _time != null ? widget.accentColor : widget.subtextColor),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              _formatTime(),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _time != null ? widget.accentColor : widget.subtextColor,
+                                fontWeight: _time != null ? FontWeight.w600 : FontWeight.normal,
+                                decoration: TextDecoration.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
-            child: CupertinoTextField(
-              controller: _ctrl,
-              placeholder: 'What do you need to do?',
-              placeholderStyle: TextStyle(color: widget.subtextColor),
-              style: TextStyle(color: widget.textColor, fontSize: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(color: Colors.transparent),
-              maxLines: 3,
-              minLines: 1,
-            ),
-          ),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 20),
 
-          // Date & Time chips
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: _pickDate,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: _date != null ? widget.accentColor.withValues(alpha: 0.12) : widget.cardColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _date != null ? widget.accentColor : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(CupertinoIcons.calendar, size: 18, color: _date != null ? widget.accentColor : widget.subtextColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatDate(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: _date != null ? widget.accentColor : widget.subtextColor,
-                            fontWeight: _date != null ? FontWeight.w600 : FontWeight.normal,
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              child: CupertinoButton(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                borderRadius: BorderRadius.circular(16),
+                color: widget.accentColor,
+                onPressed: () {
+                  if (_ctrl.text.trim().isEmpty) {
+                    showCupertinoDialog(
+                      context: context,
+                      builder: (_) => CupertinoAlertDialog(
+                        title: const Text("Task Required"),
+                        content: const Text("Please enter a task before saving."),
+                        actions: [
+                          CupertinoDialogAction(
+                            child: const Text("OK"),
+                            onPressed: () => Navigator.pop(context),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
+                        ],
+                      ),
+                    );
+                    return;
+                  }
+                  widget.onSave(_ctrl.text, _date, _time);
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  'Save Task',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: GestureDetector(
-                  onTap: _pickTime,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: _time != null ? widget.accentColor.withValues(alpha: 0.12) : widget.cardColor,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _time != null ? widget.accentColor : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(CupertinoIcons.clock, size: 18, color: _time != null ? widget.accentColor : widget.subtextColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatTime(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: _time != null ? widget.accentColor : widget.subtextColor,
-                            fontWeight: _time != null ? FontWeight.w600 : FontWeight.normal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Save Button
-          SizedBox(
-            width: double.infinity,
-            child: CupertinoButton(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              borderRadius: BorderRadius.circular(16),
-              color: widget.accentColor,
-              onPressed: () {
-                if (_ctrl.text.trim().isEmpty) {
-                  showCupertinoDialog(
-                    context: context,
-                    builder: (_) => CupertinoAlertDialog(
-                      title: const Text("Task Required"),
-                      content: const Text("Please enter a task before saving."),
-                      actions: [
-                        CupertinoDialogAction(
-                          child: const Text("OK"),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  );
-                  return;
-                }
-                widget.onSave(_ctrl.text, _date, _time);
-                Navigator.pop(context);
-              },
-              child: const Text(
-                'Save Task',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -829,6 +1006,76 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+}
+
+// ── Toast Widget ──────────────────────────────────────────────────────────────
+class _ToastWidget extends StatefulWidget {
+  final String message;
+  final Color iconColor;
+  final IconData icon;
+  const _ToastWidget({
+    required this.message,
+    this.iconColor = const Color(0xFFFFB300),
+    this.icon = CupertinoIcons.clock_fill,
+  });
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _ctrl.forward();
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) _ctrl.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(_anim),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E).withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, color: widget.iconColor, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.message,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, decoration: TextDecoration.none, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

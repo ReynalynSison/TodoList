@@ -38,25 +38,24 @@ class _NotificationPageState extends State<NotificationPage> {
 
   List<dynamic> get _allTasks => List<dynamic>.from(box.get("todo", defaultValue: []));
 
+  /// Returns null if the task has no time (should not appear in timed sections)
   String _getStatus(dynamic task) {
     final dateStr = task["date"];
     final timeStr = task["time"];
-    if (dateStr == null || dateStr == '') return 'upcoming';
+    // No time set → not trackable for overdue/due-soon
+    if (timeStr == null || timeStr == '') return 'no-time';
+    if (dateStr == null || dateStr == '') return 'no-time';
     try {
       DateTime taskDate = DateFormat('yyyy-MM-dd').parse(dateStr);
-      if (timeStr != null && timeStr != '') {
-        final parts = (timeStr as String).split(':');
-        taskDate = DateTime(taskDate.year, taskDate.month, taskDate.day,
-            int.parse(parts[0]), int.parse(parts[1]));
-      } else {
-        taskDate = DateTime(taskDate.year, taskDate.month, taskDate.day, 23, 59);
-      }
+      final parts = (timeStr as String).split(':');
+      taskDate = DateTime(taskDate.year, taskDate.month, taskDate.day,
+          int.parse(parts[0]), int.parse(parts[1]));
       final diff = taskDate.difference(DateTime.now());
       if (diff.isNegative) return 'overdue';
-      if (diff.inSeconds <= 300) return 'due-soon'; // ≤ 5 minutes = 300 seconds
+      if (diff.inSeconds <= 300) return 'due-soon';
       return 'upcoming';
     } catch (_) {
-      return 'upcoming';
+      return 'no-time';
     }
   }
 
@@ -114,9 +113,11 @@ class _NotificationPageState extends State<NotificationPage> {
       valueListenable: box.listenable(),
       builder: (context, box, _) {
         final tasks = _allTasks.where((t) => t["isDone"] != true).toList();
-        final overdue = tasks.where((t) => _getStatus(t) == 'overdue').toList();
-        final dueSoon = tasks.where((t) => _getStatus(t) == 'due-soon').toList();
-        final upcoming = tasks.where((t) => _getStatus(t) == 'upcoming').toList();
+        final overdue   = tasks.where((t) => _getStatus(t) == 'overdue').toList();
+        final dueSoon   = tasks.where((t) => _getStatus(t) == 'due-soon').toList();
+        final upcoming  = tasks.where((t) => _getStatus(t) == 'upcoming').toList();
+        final noTime    = tasks.where((t) => _getStatus(t) == 'no-time').toList();
+        final hasAlerts = overdue.isNotEmpty || dueSoon.isNotEmpty || upcoming.isNotEmpty;
 
         return CupertinoPageScaffold(
       backgroundColor: _bgColor,
@@ -143,6 +144,34 @@ class _NotificationPageState extends State<NotificationPage> {
                             color: _subtextColor.withValues(alpha: 0.6),
                             fontSize: 13)),
                   ],
+                ),
+              )
+            : !hasAlerts && noTime.isNotEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.clock_fill, size: 56,
+                          color: _subtextColor.withValues(alpha: 0.35)),
+                      const SizedBox(height: 14),
+                      Text('No alerts yet',
+                          style: TextStyle(
+                              color: _textColor,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your tasks don\'t have a time set.\nSet a time when adding a task so it appears here as Upcoming, Due Soon, or Overdue.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: _subtextColor,
+                            fontSize: 13,
+                            height: 1.5),
+                      ),
+                    ],
+                  ),
                 ),
               )
             : ListView(
@@ -186,6 +215,44 @@ class _NotificationPageState extends State<NotificationPage> {
                           task: t,
                           statusColor: const Color(0xFF5B9CF6),
                           statusLabel: 'Upcoming',
+                          deadline: _formatDeadline(t),
+                          cardColor: _cardColor,
+                          textColor: _textColor,
+                          subtextColor: _subtextColor,
+                        )),
+                    const SizedBox(height: 16),
+                  ],
+                  if (noTime.isNotEmpty) ...[
+                    _SectionHeader(
+                        label: 'No Time Set',
+                        color: _subtextColor,
+                        icon: CupertinoIcons.clock),
+                    // Info banner
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _subtextColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _subtextColor.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(CupertinoIcons.info_circle, size: 16, color: _subtextColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'These tasks have no time set and won\'t trigger alerts. Edit the task and add a time to track them here.',
+                              style: TextStyle(fontSize: 12, color: _subtextColor, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...noTime.map((t) => _NotifCard(
+                          task: t,
+                          statusColor: _subtextColor,
+                          statusLabel: 'No Time',
                           deadline: _formatDeadline(t),
                           cardColor: _cardColor,
                           textColor: _textColor,

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:local_auth/local_auth.dart';
 import 'main.dart';
 
 class Settings extends StatefulWidget {
@@ -12,7 +13,7 @@ class Settings extends StatefulWidget {
 
 class _SettingsState extends State<Settings> {
   final box = Hive.box("database");
-  String _biometricSubtitle = 'Face ID / Touch ID';
+  String _biometricSubtitle = 'Face ID';
 
   @override
   void initState() {
@@ -29,10 +30,16 @@ class _SettingsState extends State<Settings> {
     } catch (_) {}
   }
 
-  // Dynamically detect biometric type without importing local_auth here
+  // Dynamically detect biometric type using local_auth
   Future<String> _loadAvailable() async {
-    // Fallback subtitle — settings page no longer imports local_auth
-    return 'Face ID / Touch ID';
+    try {
+      final auth = LocalAuthentication();
+      final available = await auth.getAvailableBiometrics();
+      if (available.contains(BiometricType.face)) return 'Face ID';
+      return 'Face ID';
+    } catch (_) {
+      return 'Face ID';
+    }
   }
 
   void _toggleBiometrics(bool enable) {
@@ -181,9 +188,9 @@ class _SettingsState extends State<Settings> {
                   cardColor: _cardColor,
                   children: [
                     _SettingRow(
-                      icon: Icons.fingerprint_rounded,
+                      icon: Icons.face_retouching_natural,
                       iconColor: const Color(0xFF4CAF50),
-                      title: 'Biometrics',
+                      title: 'Face ID',
                       subtitle: _biometricSubtitle,
                       trailing: CupertinoSwitch(
                         value: box.get("biometrics", defaultValue: false) as bool,

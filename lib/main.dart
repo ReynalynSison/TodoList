@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:local_auth/local_auth.dart';
 import 'homepage.dart';
@@ -157,6 +158,29 @@ class _LoginPageState extends State<LoginPage> {
                           }
                         },
                       ),
+
+                      // Biometric button — shown only when enabled in Settings
+                      if (box.get("biometrics", defaultValue: false) as bool)
+                        CupertinoButton(
+                          child: _FaceIdIcon(size: 50, color: _textDark),
+                          onPressed: () async {
+                            try {
+                              final bool didAuthenticate = await auth.authenticate(
+                                localizedReason: 'Login to your account',
+                                // ignore: deprecated_member_use
+                                biometricOnly: true,
+                                persistAcrossBackgrounding: true,
+                              );
+                              if (didAuthenticate) {
+                                if (!mounted) return;
+                                Navigator.pushReplacement(context,
+                                    CupertinoPageRoute(builder: (_) => const Homepage()));
+                              }
+                            } catch (e) {
+                              setState(() => msg = "Auth Error: $e");
+                            }
+                          },
+                        ),
 
                       // Error message
                       if (msg.isNotEmpty) ...[
@@ -430,6 +454,92 @@ class AuthPrimaryButton extends StatelessWidget {
                   letterSpacing: 0.3)),
         ),
       );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Face ID Icon (custom painted to match iOS Face ID symbol)
+// ─────────────────────────────────────────────────────────────────────
+class _FaceIdIcon extends StatelessWidget {
+  final double size;
+  final Color? color;
+  const _FaceIdIcon({this.size = 44, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final resolvedColor = color ?? CupertinoTheme.of(context).primaryContrastingColor;
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _FaceIdPainter(color: resolvedColor),
+    );
+  }
+}
+
+class _FaceIdPainter extends CustomPainter {
+  final Color color;
+  const _FaceIdPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.07
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final w = size.width;
+    final h = size.height;
+    final r = size.width * 0.18; // corner radius
+
+    // ── Rounded square outline ────────────────────────────────────
+    // Top-left corner
+    canvas.drawArc(Rect.fromLTWH(0, 0, r * 2, r * 2), 3.14159, 3.14159 / 2, false, paint);
+    canvas.drawLine(Offset(r, 0), Offset(w * 0.38, 0), paint);
+    // Top-right corner
+    canvas.drawArc(Rect.fromLTWH(w - r * 2, 0, r * 2, r * 2), 3 * 3.14159 / 2, 3.14159 / 2, false, paint);
+    canvas.drawLine(Offset(w * 0.62, 0), Offset(w - r, 0), paint);
+    // Bottom-left corner
+    canvas.drawArc(Rect.fromLTWH(0, h - r * 2, r * 2, r * 2), 3.14159 / 2, 3.14159 / 2, false, paint);
+    canvas.drawLine(Offset(r, h), Offset(w * 0.38, h), paint);
+    // Bottom-right corner
+    canvas.drawArc(Rect.fromLTWH(w - r * 2, h - r * 2, r * 2, r * 2), 0, 3.14159 / 2, false, paint);
+    canvas.drawLine(Offset(w * 0.62, h), Offset(w - r, h), paint);
+    // Left side
+    canvas.drawLine(Offset(0, r), Offset(0, h * 0.38), paint);
+    canvas.drawLine(Offset(0, h * 0.62), Offset(0, h - r), paint);
+    // Right side
+    canvas.drawLine(Offset(w, r), Offset(w, h * 0.38), paint);
+    canvas.drawLine(Offset(w, h * 0.62), Offset(w, h - r), paint);
+
+    // ── Eyes ──────────────────────────────────────────────────────
+    final eyePaint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.065
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    // left eye
+    canvas.drawLine(Offset(w * 0.33, h * 0.38), Offset(w * 0.33, h * 0.44), eyePaint);
+    // right eye
+    canvas.drawLine(Offset(w * 0.67, h * 0.38), Offset(w * 0.67, h * 0.44), eyePaint);
+
+    // ── Nose ──────────────────────────────────────────────────────
+    final nosePath = Path()
+      ..moveTo(w * 0.50, h * 0.42)
+      ..lineTo(w * 0.44, h * 0.56)
+      ..lineTo(w * 0.56, h * 0.56);
+    canvas.drawPath(nosePath, eyePaint);
+
+    // ── Smile ─────────────────────────────────────────────────────
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(w * 0.50, h * 0.56), width: w * 0.30, height: h * 0.18),
+      0,
+      3.14159,
+      false,
+      eyePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FaceIdPainter old) => old.color != color;
 }
 
 // Keep AuthInputLabel for any remaining references

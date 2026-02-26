@@ -114,15 +114,12 @@ class NotificationService {
     if (scheduledTime.isBefore(DateTime.now())) return;
 
     await _plugin.zonedSchedule(
-      id,                          // positional — v20 requires positional id
-      title,
-      body,
-      tz.TZDateTime.from(scheduledTime, tz.local),
-      _notifDetails,
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
+      notificationDetails: _notifDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      // Required for iOS scheduled notifications to fire correctly
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
@@ -155,8 +152,8 @@ class NotificationService {
 
   Future<void> cancelTaskNotification(int id) async {
     if (!_isSupported) return;
-    await _plugin.cancel(id);              // positional in v20
-    await _plugin.cancel(id + 100000);
+    await _plugin.cancel(id: id);
+    await _plugin.cancel(id: id + 100000);
   }
 
   Future<void> cancelAll() async {

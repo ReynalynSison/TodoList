@@ -120,149 +120,149 @@ class _NotificationPageState extends State<NotificationPage> {
         final hasAlerts = overdue.isNotEmpty || dueSoon.isNotEmpty || upcoming.isNotEmpty;
 
         return CupertinoPageScaffold(
-      backgroundColor: _bgColor,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text('Notifications', style: TextStyle(color: _textColor)),
-        backgroundColor: _bgColor.withValues(alpha: 0.95),
-        border: Border(bottom: BorderSide(
-            color: _isDarkMode ? Colors.white12 : Colors.black12, width: 0.5)),
-      ),
-      child: SafeArea(
-        child: tasks.isEmpty
-            ? Center(
+          backgroundColor: _bgColor,
+          navigationBar: CupertinoNavigationBar(
+            middle: Text('Notifications', style: TextStyle(color: _textColor)),
+            backgroundColor: _bgColor.withValues(alpha: 0.95),
+            border: Border(bottom: BorderSide(
+                color: _isDarkMode ? Colors.white12 : Colors.black12, width: 0.5)),
+          ),
+          child: SafeArea(
+            child: tasks.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.bell_slash, size: 56,
+                      color: _subtextColor.withValues(alpha: 0.35)),
+                  const SizedBox(height: 12),
+                  Text('No active tasks',
+                      style: TextStyle(color: _subtextColor, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text('Add tasks in the Tasks tab',
+                      style: TextStyle(
+                          color: _subtextColor.withValues(alpha: 0.6),
+                          fontSize: 13)),
+                ],
+              ),
+            )
+                : !hasAlerts && noTime.isNotEmpty
+                ? Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(CupertinoIcons.bell_slash, size: 56,
+                    Icon(CupertinoIcons.clock_fill, size: 56,
                         color: _subtextColor.withValues(alpha: 0.35)),
-                    const SizedBox(height: 12),
-                    Text('No active tasks',
-                        style: TextStyle(color: _subtextColor, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Text('Add tasks in the Tasks tab',
+                    const SizedBox(height: 14),
+                    Text('No alerts yet',
                         style: TextStyle(
-                            color: _subtextColor.withValues(alpha: 0.6),
-                            fontSize: 13)),
-                  ],
-                ),
-              )
-            : !hasAlerts && noTime.isNotEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(CupertinoIcons.clock_fill, size: 56,
-                          color: _subtextColor.withValues(alpha: 0.35)),
-                      const SizedBox(height: 14),
-                      Text('No alerts yet',
-                          style: TextStyle(
-                              color: _textColor,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your tasks don\'t have a time set.\nSet a time when adding a task so it appears here as Upcoming, Due Soon, or Overdue.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: _subtextColor,
-                            fontSize: 13,
-                            height: 1.5),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: [
-                  if (overdue.isNotEmpty) ...[
-                    _SectionHeader(label: 'Overdue',
-                        color: const Color(0xFFFF6B6B),
-                        icon: CupertinoIcons.exclamationmark_circle_fill),
-                    ...overdue.map((t) => _NotifCard(
-                          task: t,
-                          statusColor: const Color(0xFFFF6B6B),
-                          statusLabel: 'Overdue',
-                          deadline: _formatDeadline(t),
-                          cardColor: _cardColor,
-                          textColor: _textColor,
-                          subtextColor: _subtextColor,
-                        )),
-                    const SizedBox(height: 16),
-                  ],
-                  if (dueSoon.isNotEmpty) ...[
-                    _SectionHeader(label: 'Due Soon',
-                        color: const Color(0xFFFFB300),
-                        icon: CupertinoIcons.clock_fill),
-                    ...dueSoon.map((t) => _NotifCard(
-                          task: t,
-                          statusColor: const Color(0xFFFFB300),
-                          statusLabel: _getDueSoonLabel(t),
-                          deadline: _formatDeadline(t),
-                          cardColor: _cardColor,
-                          textColor: _textColor,
-                          subtextColor: _subtextColor,
-                        )),
-                    const SizedBox(height: 16),
-                  ],
-                  if (upcoming.isNotEmpty) ...[
-                    _SectionHeader(label: 'Upcoming',
-                        color: const Color(0xFF5B9CF6),
-                        icon: CupertinoIcons.calendar_today),
-                    ...upcoming.map((t) => _NotifCard(
-                          task: t,
-                          statusColor: const Color(0xFF5B9CF6),
-                          statusLabel: 'Upcoming',
-                          deadline: _formatDeadline(t),
-                          cardColor: _cardColor,
-                          textColor: _textColor,
-                          subtextColor: _subtextColor,
-                        )),
-                    const SizedBox(height: 16),
-                  ],
-                  if (noTime.isNotEmpty) ...[
-                    _SectionHeader(
-                        label: 'No Time Set',
-                        color: _subtextColor,
-                        icon: CupertinoIcons.clock),
-                    // Info banner
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _subtextColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _subtextColor.withValues(alpha: 0.2)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(CupertinoIcons.info_circle, size: 16, color: _subtextColor),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'These tasks have no time set and won\'t trigger alerts. Edit the task and add a time to track them here.',
-                              style: TextStyle(fontSize: 12, color: _subtextColor, height: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
+                            color: _textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your tasks don\'t have a time set.\nSet a time when adding a task so it appears here as Upcoming, Due Soon, or Overdue.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: _subtextColor,
+                          fontSize: 13,
+                          height: 1.5),
                     ),
-                    ...noTime.map((t) => _NotifCard(
-                          task: t,
-                          statusColor: _subtextColor,
-                          statusLabel: 'No Time',
-                          deadline: _formatDeadline(t),
-                          cardColor: _cardColor,
-                          textColor: _textColor,
-                          subtextColor: _subtextColor,
-                        )),
                   ],
-                ],
+                ),
               ),
-      ),
-    );
+            )
+                : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              children: [
+                if (overdue.isNotEmpty) ...[
+                  _SectionHeader(label: 'Overdue',
+                      color: const Color(0xFFFF6B6B),
+                      icon: CupertinoIcons.exclamationmark_circle_fill),
+                  ...overdue.map((t) => _NotifCard(
+                    task: t,
+                    statusColor: const Color(0xFFFF6B6B),
+                    statusLabel: 'Overdue',
+                    deadline: _formatDeadline(t),
+                    cardColor: _cardColor,
+                    textColor: _textColor,
+                    subtextColor: _subtextColor,
+                  )),
+                  const SizedBox(height: 16),
+                ],
+                if (dueSoon.isNotEmpty) ...[
+                  _SectionHeader(label: 'Due Soon',
+                      color: const Color(0xFFFFB300),
+                      icon: CupertinoIcons.clock_fill),
+                  ...dueSoon.map((t) => _NotifCard(
+                    task: t,
+                    statusColor: const Color(0xFFFFB300),
+                    statusLabel: _getDueSoonLabel(t),
+                    deadline: _formatDeadline(t),
+                    cardColor: _cardColor,
+                    textColor: _textColor,
+                    subtextColor: _subtextColor,
+                  )),
+                  const SizedBox(height: 16),
+                ],
+                if (upcoming.isNotEmpty) ...[
+                  _SectionHeader(label: 'Upcoming',
+                      color: const Color(0xFF5B9CF6),
+                      icon: CupertinoIcons.calendar_today),
+                  ...upcoming.map((t) => _NotifCard(
+                    task: t,
+                    statusColor: const Color(0xFF5B9CF6),
+                    statusLabel: 'Upcoming',
+                    deadline: _formatDeadline(t),
+                    cardColor: _cardColor,
+                    textColor: _textColor,
+                    subtextColor: _subtextColor,
+                  )),
+                  const SizedBox(height: 16),
+                ],
+                if (noTime.isNotEmpty) ...[
+                  _SectionHeader(
+                      label: 'No Time Set',
+                      color: _subtextColor,
+                      icon: CupertinoIcons.clock),
+                  // Info banner
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _subtextColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _subtextColor.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(CupertinoIcons.info_circle, size: 16, color: _subtextColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'These tasks have no time set and won\'t trigger alerts. Edit the task and add a time to track them here.',
+                            style: TextStyle(fontSize: 12, color: _subtextColor, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...noTime.map((t) => _NotifCard(
+                    task: t,
+                    statusColor: _subtextColor,
+                    statusLabel: 'No Time',
+                    deadline: _formatDeadline(t),
+                    cardColor: _cardColor,
+                    textColor: _textColor,
+                    subtextColor: _subtextColor,
+                  )),
+                ],
+              ],
+            ),
+          ),
+        );
       }, // end ValueListenableBuilder builder
     );   // end ValueListenableBuilder
   }
@@ -277,18 +277,18 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(label.toUpperCase(),
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  letterSpacing: 1.2)),
-        ]),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(children: [
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: 6),
+      Text(label.toUpperCase(),
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: 1.2)),
+    ]),
+  );
 }
 
 class _NotifCard extends StatelessWidget {
@@ -352,7 +352,7 @@ class _NotifCard extends StatelessWidget {
             const SizedBox(width: 8),
             Container(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: statusColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),

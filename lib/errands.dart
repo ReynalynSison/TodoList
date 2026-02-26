@@ -37,7 +37,7 @@ class _ErrandsState extends State<Errands> {
   void _scrollToToday() {
     final today = DateTime.now();
     final todayIndex = _weekDays.indexWhere((d) =>
-        d.year == today.year && d.month == today.month && d.day == today.day);
+    d.year == today.year && d.month == today.month && d.day == today.day);
     if (todayIndex < 0 || !_weekScrollController.hasClients) return;
     // Scroll so today is centered in the viewport
     final screenWidth = _weekScrollController.position.viewportDimension;
@@ -68,13 +68,10 @@ class _ErrandsState extends State<Errands> {
 
   String get _username => box.get("username", defaultValue: "there") ?? "there";
 
-  // Show 3 weeks: previous, current, next — 21 days total centered on today
+  // Show only today and the past 5 days (6 days total), no future days
   List<DateTime> get _weekDays {
     final today = DateTime.now();
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    // Start from 7 days before this Monday (previous week)
-    final start = monday.subtract(const Duration(days: 7));
-    return List.generate(21, (i) => start.add(Duration(days: i)));
+    return List.generate(6, (i) => today.subtract(Duration(days: 5 - i)));
   }
 
   Color get _accentColor {
@@ -207,219 +204,219 @@ class _ErrandsState extends State<Errands> {
       child: SafeArea(
         child: Stack(
           children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ──────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Hi, $_username!',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$totalTasks task${totalTasks == 1 ? '' : 's'} total',
-                    style: TextStyle(fontSize: 15, color: _subtextColor),
-                  ),
-                  const SizedBox(height: 14),
-                  // ── Today / All toggle ──────────────────
-                  Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ──────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: () => setState(() => _showAll = false),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                          decoration: BoxDecoration(
-                            color: !_showAll ? _accentColor : _accentColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Today',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: !_showAll ? Colors.white : _accentColor,
-                            ),
-                          ),
+                      Text(
+                        'Hi, $_username!',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: _textColor,
+                          letterSpacing: -0.5,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => setState(() => _showAll = true),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                          decoration: BoxDecoration(
-                            color: _showAll ? _accentColor : _accentColor.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'All  ($totalTasks)',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _showAll ? Colors.white : _accentColor,
-                            ),
-                          ),
-                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$totalTasks task${totalTasks == 1 ? '' : 's'} total',
+                        style: TextStyle(fontSize: 15, color: _subtextColor),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Weekly Calendar Strip ───────────────────────
-            SizedBox(
-              height: 80,
-              child: ListView.builder(
-                controller: _weekScrollController,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _weekDays.length,
-                itemBuilder: (context, i) {
-                  final day = _weekDays[i];
-                  final isSelected = DateFormat('yyyy-MM-dd').format(day) ==
-                      DateFormat('yyyy-MM-dd').format(_selectedDay);
-                  final isToday = DateFormat('yyyy-MM-dd').format(day) ==
-                      DateFormat('yyyy-MM-dd').format(DateTime.now());
-                  final isPast = day.isBefore(DateTime(
-                      DateTime.now().year, DateTime.now().month, DateTime.now().day));
-                  final dayTasks = todo.where((t) {
-                    final d = t["date"];
-                    if (d == null || d == "") return isToday;
-                    return d == DateFormat('yyyy-MM-dd').format(day);
-                  }).length;
-
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedDay = day),
-                    child: Opacity(
-                      opacity: isPast ? 0.45 : 1.0,
-                      child: Container(
-                        width: 52,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          color: isSelected ? _accentColor : _cardColor,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: isSelected
-                              ? [BoxShadow(color: _accentColor.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))]
-                              : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              DateFormat('EEE').format(day).toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: isSelected ? Colors.white70 : _subtextColor,
+                      const SizedBox(height: 14),
+                      // ── Today / All toggle ──────────────────
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => setState(() => _showAll = false),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: !_showAll ? _accentColor : _accentColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${day.day}',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: isSelected ? Colors.white : _textColor,
-                              ),
-                            ),
-                            if (dayTasks > 0)
-                              Container(
-                                margin: const EdgeInsets.only(top: 3),
-                                width: 5,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? Colors.white : _accentColor,
-                                  shape: BoxShape.circle,
+                              child: Text(
+                                'Today',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: !_showAll ? Colors.white : _accentColor,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Section Title ──────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _showAll ? 'All Tasks' : DateFormat('MMMM d, yyyy').format(_selectedDay),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: _textColor,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // ── Task List ──────────────────────────────────
-            Expanded(
-              child: tasks.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(CupertinoIcons.checkmark_seal, size: 54, color: _subtextColor.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
-                          Text(
-                            _showAll ? 'No tasks yet' : 'No tasks for this day',
-                            style: TextStyle(color: _subtextColor, fontSize: 16),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => setState(() => _showAll = true),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: _showAll ? _accentColor : _accentColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'All  ($totalTasks)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _showAll ? Colors.white : _accentColor,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                      itemCount: tasks.length,
-                      itemBuilder: (context, i) {
-                        final task = tasks[i];
-                        final gIdx = _globalIndex(task);
-                        return _TaskCard(
-                          task: task,
-                          accentColor: _accentColor,
-                          cardColor: _cardColor,
-                          textColor: _textColor,
-                          subtextColor: _subtextColor,
-                          isDark: _isDarkMode,
-                          onToggle: () => _toggleDone(gIdx),
-                          onArchive: () => _archiveTask(gIdx),
-                          onDelete: () => _deleteTask(gIdx),
-                        );
-                      },
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ── Weekly Calendar Strip ───────────────────────
+                SizedBox(
+                  height: 80,
+                  child: ListView.builder(
+                    controller: _weekScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _weekDays.length,
+                    itemBuilder: (context, i) {
+                      final day = _weekDays[i];
+                      final isSelected = DateFormat('yyyy-MM-dd').format(day) ==
+                          DateFormat('yyyy-MM-dd').format(_selectedDay);
+                      final isToday = DateFormat('yyyy-MM-dd').format(day) ==
+                          DateFormat('yyyy-MM-dd').format(DateTime.now());
+                      final isPast = day.isBefore(DateTime(
+                          DateTime.now().year, DateTime.now().month, DateTime.now().day));
+                      final dayTasks = todo.where((t) {
+                        final d = t["date"];
+                        if (d == null || d == "") return isToday;
+                        return d == DateFormat('yyyy-MM-dd').format(day);
+                      }).length;
+
+                      return GestureDetector(
+                        onTap: isToday ? () => setState(() => _selectedDay = day) : null,
+                        child: Opacity(
+                          opacity: isPast ? 0.45 : 1.0,
+                          child: Container(
+                            width: 52,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected ? _accentColor : _cardColor,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: isSelected
+                                  ? [BoxShadow(color: _accentColor.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))]
+                                  : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2))],
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  DateFormat('EEE').format(day).toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: isSelected ? Colors.white70 : _subtextColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${day.day}',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected ? Colors.white : _textColor,
+                                  ),
+                                ),
+                                if (dayTasks > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 3),
+                                    width: 5,
+                                    height: 5,
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Colors.white : _accentColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ── Section Title ──────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    _showAll ? 'All Tasks' : DateFormat('MMMM d, yyyy').format(_selectedDay),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor,
                     ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Task List ──────────────────────────────────
+                Expanded(
+                  child: tasks.isEmpty
+                      ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.checkmark_seal, size: 54, color: _subtextColor.withValues(alpha: 0.4)),
+                        const SizedBox(height: 12),
+                        Text(
+                          _showAll ? 'No tasks yet' : 'No tasks for this day',
+                          style: TextStyle(color: _subtextColor, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  )
+                      : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                    itemCount: tasks.length,
+                    itemBuilder: (context, i) {
+                      final task = tasks[i];
+                      final gIdx = _globalIndex(task);
+                      return _TaskCard(
+                        task: task,
+                        accentColor: _accentColor,
+                        cardColor: _cardColor,
+                        textColor: _textColor,
+                        subtextColor: _subtextColor,
+                        isDark: _isDarkMode,
+                        onToggle: () => _toggleDone(gIdx),
+                        onArchive: () => _archiveTask(gIdx),
+                        onDelete: () => _deleteTask(gIdx),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            // ── Floating Add Button ──────────────────────
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: FloatingAddButton(
+                color: _accentColor,
+                onPressed: _openAddSheet,
+              ),
             ),
           ],
-        ),
-        // ── Floating Add Button ──────────────────────
-        Positioned(
-          bottom: 24,
-          right: 24,
-          child: FloatingAddButton(
-            color: _accentColor,
-            onPressed: _openAddSheet,
-          ),
-        ),
-      ],
         ),
       ),
     );
@@ -556,29 +553,7 @@ class _TaskCard extends StatelessWidget {
           ],
         ),
         child: GestureDetector(
-          onTap: () {
-            final isDone = task["isDone"] == true;
-            showCupertinoDialog(
-              context: context,
-              builder: (_) => CupertinoAlertDialog(
-                title: Text(isDone ? "Mark as Undone?" : "Mark as Done?"),
-                content: Text(isDone
-                    ? '"${task["task"]}" will be marked as not done.'
-                    : '"${task["task"]}" will be marked as completed.'),
-                actions: [
-                  CupertinoDialogAction(
-                    onPressed: () { Navigator.pop(context); onToggle(); },
-                    child: Text(isDone ? "Mark Undone" : "Mark Done"),
-                  ),
-                  CupertinoDialogAction(
-                    isDestructiveAction: true,
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel"),
-                  ),
-                ],
-              ),
-            );
-          },
+          onTap: onToggle,
           child: Container(
             decoration: BoxDecoration(
               color: cardColor,
@@ -1109,6 +1084,3 @@ class FloatingAddButton extends StatelessWidget {
     );
   }
 }
-
-
-

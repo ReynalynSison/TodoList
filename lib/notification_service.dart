@@ -9,14 +9,14 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
 
   /// Returns true if the current platform supports local notifications
   bool get _isSupported =>
       defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
+          defaultTargetPlatform == TargetPlatform.iOS;
 
   Future<void> init() async {
     if (_initialized || !_isSupported) return;
@@ -26,10 +26,10 @@ class NotificationService {
     tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
 
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    AndroidInitializationSettings('@mipmap/ic_launcher');
 
     const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
+    DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
@@ -49,15 +49,15 @@ class NotificationService {
 
     final iosPlugin = _plugin
         .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
+        IOSFlutterLocalNotificationsPlugin>();
     if (iosPlugin != null) {
       return await iosPlugin.requestPermissions(
-              alert: true, badge: true, sound: true) ??
+          alert: true, badge: true, sound: true) ??
           false;
     }
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+        AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       return await androidPlugin.requestNotificationsPermission() ?? false;
     }
@@ -65,7 +65,7 @@ class NotificationService {
   }
 
   static const AndroidNotificationDetails _androidDetails =
-      AndroidNotificationDetails(
+  AndroidNotificationDetails(
     'task_reminders',
     'Task Reminders',
     channelDescription: 'Reminders for your scheduled tasks',
@@ -142,4 +142,3 @@ class NotificationService {
   static int taskId(String taskName, String dateStr) =>
       (taskName + dateStr).hashCode.abs() % 100000;
 }
-

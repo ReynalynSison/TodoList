@@ -12,8 +12,29 @@ class CalendarPage extends StatefulWidget {
 
 class _CalendarPageState extends State<CalendarPage> {
   final box = Hive.box("database");
-  DateTime _focusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  late PageController _pageController;
+  static const int _initialPage = 1200;
+  late DateTime _focusedMonth;
   DateTime _selectedDay = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+  DateTime _monthForPage(int page) {
+    final diff = page - _initialPage;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month + diff);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _focusedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+    _pageController = PageController(initialPage: _initialPage);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   bool get _isDark => box.get("darkMode", defaultValue: false) as bool;
   Color get _bg => _isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F0EB);
@@ -53,10 +74,9 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   // Returns all days to display in the grid (including padding from prev/next month)
-  List<DateTime?> _buildCalendarDays() {
-    final firstOfMonth = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
-    final daysInMonth = DateUtils.getDaysInMonth(_focusedMonth.year, _focusedMonth.month);
-    // weekday: Mon=1 … Sun=7, we want Mon as first col (index 0)
+  List<DateTime?> _buildCalendarDays(DateTime month) {
+    final firstOfMonth = DateTime(month.year, month.month, 1);
+    final daysInMonth = DateUtils.getDaysInMonth(month.year, month.month);
     final startPad = (firstOfMonth.weekday - 1) % 7;
     final total = startPad + daysInMonth;
     final rows = (total / 7).ceil();
@@ -67,17 +87,21 @@ class _CalendarPageState extends State<CalendarPage> {
       if (dayNum < 1 || dayNum > daysInMonth) {
         days.add(null);
       } else {
-        days.add(DateTime(_focusedMonth.year, _focusedMonth.month, dayNum));
+        days.add(DateTime(month.year, month.month, dayNum));
       }
     }
     return days;
   }
 
-  void _prevMonth() => setState(() =>
-      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1));
+  void _prevMonth() {
+    _pageController.previousPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
 
-  void _nextMonth() => setState(() =>
-      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + 1));
+  void _nextMonth() {
+    _pageController.nextPage(
+        duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +109,6 @@ class _CalendarPageState extends State<CalendarPage> {
       valueListenable: box.listenable(),
       builder: (context, box, _) {
         final tasks = _dayTasks(_selectedDay);
-        final calDays = _buildCalendarDays();
         final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
         const weekLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -146,64 +169,79 @@ class _CalendarPageState extends State<CalendarPage> {
                         )).toList(),
                       ),
                       const SizedBox(height: 6),
-                      // Day grid
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 7,
-                          mainAxisSpacing: 4,
-                          crossAxisSpacing: 0,
-                          childAspectRatio: 1,
-                        ),
-                        itemCount: calDays.length,
-                        itemBuilder: (ctx, i) {
-                          final day = calDays[i];
-                          if (day == null) return const SizedBox.shrink();
-                          final isSelected = day == _selectedDay;
-                          final isToday = day == today;
-                          final hasTask = _hasTask(day);
-                          return GestureDetector(
-                            onTap: () => setState(() => _selectedDay = day),
-                            child: Container(
-                              margin: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? _accent
-                                    : isToday
-                                        ? _accent.withValues(alpha: 0.15)
-                                        : Colors.transparent,
-                                shape: BoxShape.circle,
+                      // Swipeable month pages
+                      SizedBox(
+                        height: 240,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          onPageChanged: (page) {
+                            setState(() {
+                              _focusedMonth = _monthForPage(page);
+                            });
+                          },
+                          itemBuilder: (ctx, page) {
+                            final month = _monthForPage(page);
+                            final calDays = _buildCalendarDays(month);
+                            return GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 7,
+                                mainAxisSpacing: 4,
+                                crossAxisSpacing: 0,
+                                childAspectRatio: 1,
                               ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    '${day.day}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: isToday || isSelected ? FontWeight.bold : FontWeight.normal,
+                              itemCount: calDays.length,
+                              itemBuilder: (ctx2, i) {
+                                final day = calDays[i];
+                                if (day == null) return const SizedBox.shrink();
+                                final isSelected = day == _selectedDay;
+                                final isToday = day == today;
+                                final hasTask = _hasTask(day);
+                                return GestureDetector(
+                                  onTap: () => setState(() => _selectedDay = day),
+                                  child: Container(
+                                    margin: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
                                       color: isSelected
-                                          ? Colors.white
+                                          ? _accent
                                           : isToday
-                                              ? _accent
-                                              : _text,
+                                          ? _accent.withValues(alpha: 0.15)
+                                          : Colors.transparent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          '${day.day}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: isToday || isSelected ? FontWeight.bold : FontWeight.normal,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : isToday
+                                                ? _accent
+                                                : _text,
+                                          ),
+                                        ),
+                                        if (hasTask)
+                                          Container(
+                                            width: 4, height: 4,
+                                            margin: const EdgeInsets.only(top: 1),
+                                            decoration: BoxDecoration(
+                                              color: isSelected ? Colors.white : _accent,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  if (hasTask)
-                                    Container(
-                                      width: 4, height: 4,
-                                      margin: const EdgeInsets.only(top: 1),
-                                      decoration: BoxDecoration(
-                                        color: isSelected ? Colors.white : _accent,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -238,66 +276,66 @@ class _CalendarPageState extends State<CalendarPage> {
                 Expanded(
                   child: tasks.isEmpty
                       ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(CupertinoIcons.calendar_badge_plus,
-                              size: 48, color: _sub.withValues(alpha: 0.35)),
-                          const SizedBox(height: 10),
-                          Text('No tasks on this day',
-                              style: TextStyle(color: _sub, fontSize: 15)),
-                        ]))
+                    Icon(CupertinoIcons.calendar_badge_plus,
+                        size: 48, color: _sub.withValues(alpha: 0.35)),
+                    const SizedBox(height: 10),
+                    Text('No tasks on this day',
+                        style: TextStyle(color: _sub, fontSize: 15)),
+                  ]))
                       : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                          itemCount: tasks.length,
-                          itemBuilder: (context, i) {
-                            final t = tasks[i];
-                            final done = t["isDone"] == true;
-                            final time = _formatTime(t["time"]);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: _card,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 8, offset: const Offset(0, 2))],
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                child: Row(children: [
-                                  Container(
-                                    width: 4, height: 36,
-                                    decoration: BoxDecoration(
-                                      color: done ? _sub.withValues(alpha: 0.3) : _accent,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(t["task"], style: TextStyle(
-                                          fontSize: 15, fontWeight: FontWeight.w500,
-                                          color: done ? _sub : _text,
-                                          decoration: done
-                                              ? TextDecoration.lineThrough
-                                              : TextDecoration.none,
-                                          decorationColor: _sub)),
-                                      if (time.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Row(children: [
-                                          Icon(CupertinoIcons.clock, size: 11,
-                                              color: _accent.withValues(alpha: 0.8)),
-                                          const SizedBox(width: 3),
-                                          Text(time, style: TextStyle(fontSize: 11,
-                                              color: _accent.withValues(alpha: 0.8))),
-                                        ]),
-                                      ],
-                                    ],
-                                  )),
-                                ]),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    itemCount: tasks.length,
+                    itemBuilder: (context, i) {
+                      final t = tasks[i];
+                      final done = t["isDone"] == true;
+                      final time = _formatTime(t["time"]);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _card,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 8, offset: const Offset(0, 2))],
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          child: Row(children: [
+                            Container(
+                              width: 4, height: 36,
+                              decoration: BoxDecoration(
+                                color: done ? _sub.withValues(alpha: 0.3) : _accent,
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(t["task"], style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w500,
+                                    color: done ? _sub : _text,
+                                    decoration: done
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                    decorationColor: _sub)),
+                                if (time.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Row(children: [
+                                    Icon(CupertinoIcons.clock, size: 11,
+                                        color: _accent.withValues(alpha: 0.8)),
+                                    const SizedBox(width: 3),
+                                    Text(time, style: TextStyle(fontSize: 11,
+                                        color: _accent.withValues(alpha: 0.8))),
+                                  ]),
+                                ],
+                              ],
+                            )),
+                          ]),
                         ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

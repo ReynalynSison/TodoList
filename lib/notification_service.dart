@@ -9,14 +9,15 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   final FlutterLocalNotificationsPlugin _plugin =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
 
-  /// Returns true if the current platform supports local notifications
+  /// Platforms that support local notifications
   bool get _isSupported =>
       defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS;
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   Future<void> init() async {
     if (_initialized || !_isSupported) return;
@@ -26,19 +27,26 @@ class NotificationService {
     tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
 
     const AndroidInitializationSettings androidSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
+    // iOS: do NOT request permissions here — we request them separately
+    // so we can handle the result. presentAlert/Badge/Sound control
+    // foreground display (shown because AppDelegate sets the UNDelegate).
     const DarwinInitializationSettings iosSettings =
-    DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+        DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+      defaultPresentAlert: true,
+      defaultPresentBadge: true,
+      defaultPresentSound: true,
     );
 
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
+        macOS: iosSettings,
       ),
     );
     _initialized = true;
@@ -47,16 +55,17 @@ class NotificationService {
   Future<bool> requestPermissions() async {
     if (!_isSupported) return false;
 
-    final iosPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
+    // iOS / macOS
+    final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
         IOSFlutterLocalNotificationsPlugin>();
     if (iosPlugin != null) {
       return await iosPlugin.requestPermissions(
-          alert: true, badge: true, sound: true) ??
+              alert: true, badge: true, sound: true) ??
           false;
     }
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
+
+    // Android 13+
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       return await androidPlugin.requestNotificationsPermission() ?? false;
@@ -64,23 +73,35 @@ class NotificationService {
     return false;
   }
 
+  // ── Notification detail objects ──────────────────────────────────
+
   static const AndroidNotificationDetails _androidDetails =
-  AndroidNotificationDetails(
+      AndroidNotificationDetails(
     'task_reminders',
     'Task Reminders',
     channelDescription: 'Reminders for your scheduled tasks',
     importance: Importance.max,
     priority: Priority.high,
+    // Uses the app launcher icon automatically on Android
+  );
+
+  /// iOS details — presentAlert/Badge/Sound show the banner even in foreground
+  /// (works because AppDelegate sets UNUserNotificationCenterDelegate).
+  static const DarwinNotificationDetails _iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+    sound: 'default',
+    threadIdentifier: 'planify_tasks',
   );
 
   static const NotificationDetails _notifDetails = NotificationDetails(
     android: _androidDetails,
-    iOS: DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    ),
+    iOS: _iosDetails,
+    macOS: _iosDetails,
   );
+
+  // ── Schedule ─────────────────────────────────────────────────────
 
   Future<void> scheduleTaskNotification({
     required int id,
@@ -93,12 +114,15 @@ class NotificationService {
     if (scheduledTime.isBefore(DateTime.now())) return;
 
     await _plugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
-      notificationDetails: _notifDetails,
+      id,                          // positional — v20 requires positional id
+      title,
+      body,
+      tz.TZDateTime.from(scheduledTime, tz.local),
+      _notifDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      // Required for iOS scheduled notifications to fire correctly
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
@@ -109,14 +133,15 @@ class NotificationService {
   }) async {
     if (!_isSupported) return;
 
-    // Main: at exact due time
+    // Main notification: at exact due time
     await scheduleTaskNotification(
       id: id,
       title: '⏰ Task Due',
       body: taskName,
       scheduledTime: scheduledTime,
     );
-    // 5-min early reminder
+
+    // 5-minute early reminder
     final reminderTime = scheduledTime.subtract(const Duration(minutes: 5));
     if (reminderTime.isAfter(DateTime.now())) {
       await scheduleTaskNotification(
@@ -130,8 +155,8 @@ class NotificationService {
 
   Future<void> cancelTaskNotification(int id) async {
     if (!_isSupported) return;
-    await _plugin.cancel(id: id);
-    await _plugin.cancel(id: id + 100000);
+    await _plugin.cancel(id);              // positional in v20
+    await _plugin.cancel(id + 100000);
   }
 
   Future<void> cancelAll() async {
